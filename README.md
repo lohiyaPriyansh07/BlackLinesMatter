@@ -1,2 +1,2 @@
-# BlackLinesMatter
-Its a line follower robot which can solve a maze by its own.
+# BlackLinesMatter ~ RoboBoyz
+A bot that can solve a maze by following a black line.
