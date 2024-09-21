@@ -3,4 +3,4 @@ This Bot follow the black line on white surface and capable of solving the maze 
 
 # LineFollower
 
-![LineFollower](robot.jpg)
+![LineFollower](robot.jpeg)
