@@ -1,168 +1,385 @@
-//declaring mototrs pin
-int motor1pin1 = 2;
-int motor1pin2 = 4;
-int motor2pin1 = 7;
-int motor2pin2 = 8;
+#define ir1  3
+#define ir2  A0
+#define ir3  A1
+#define ir4  A2
+#define ir5  A3
+#define ir6  A4
+#define ir7  A5
+#define ir8  2
+#define stops 7
+#define trigPin 4
+#define echoPin 8
 
-//delcaring speedControl
-int motorspeed=170;
-int curvespeed=130;
+int ir[8];                      // ir[0] -> rightfar
+// ir[1] ->
+// ir[2] -> rightnear
+// ir[3] -> rightcenter
+// ir[4] -> leftcenter
+// ir[5] -> leftnear
+// ir[6] ->
+// ir[7] -> leftfar
+int irr[8];
+//// out 4
+#define ML1 10
+#define ML2 11
 
-//sensors pins
-int s1=A0;
-int s2=A1;
-int s3=A2;
-int s4=A3;
-int s5=A4;
+#define MR1 5
+#define MR2 6
 
-//sensor data collecting variable
-int datas1;
-int datas2;
-int datas3;
-int datas4;
-int datas5;
-int dtt=400;
-int dtt2=250;
+int leapTime = 150;
 
-//movestraight
-void movestraight(){
-    analogWrite(3, motorspeed); //ENA pin
-    analogWrite(5, motorspeed); //ENB pin
-    
-    digitalWrite(motor1pin1, LOW);
-    digitalWrite(motor1pin2, HIGH);
-
-    digitalWrite(motor2pin1, LOW);
-    digitalWrite(motor2pin2, HIGH);
-}
-
-//curveturnleft
-void curveturnleft(){
-    analogWrite(3, curvespeed); //ENA pin
-    analogWrite(5, motorspeed); //ENB pin
-    digitalWrite(motor1pin1, LOW);
-    digitalWrite(motor1pin2, HIGH);
-
-    digitalWrite(motor2pin1, LOW);
-    digitalWrite(motor2pin2, HIGH);
-    
-}
-
-//curveturnright
-void curveturnright(){
-    analogWrite(3, motorspeed); //ENA pin
-    analogWrite(5, curvespeed); //ENB pin
-    digitalWrite(motor1pin1, LOW);
-    digitalWrite(motor1pin2, HIGH);
-
-    digitalWrite(motor2pin1, LOW);
-    digitalWrite(motor2pin2, HIGH);
-}
-
-//finish
-//void finish(){
-//            analogWrite(3, motorspeed); //ENA pin
-//            analogWrite(5, motorspeed); //ENB pin
-//            digitalWrite(motor1pin1, LOW);
-//            digitalWrite(motor1pin2, LOW);
-//            digitalWrite(motor2pin1, LOW);
-//            digitalWrite(motor2pin2, LOW);
-//}
-
-//turnleft
-void turnleft(){
-    analogWrite(3, 200); //ENA pin
-    analogWrite(5, 200); //ENB pin
-    digitalWrite(motor1pin1, LOW);
-    digitalWrite(motor1pin2, LOW);
-
-    digitalWrite(motor2pin1, LOW);
-    digitalWrite(motor2pin2, HIGH);    
-}
-
-//turnright
-void turnright(){
-    analogWrite(3, motorspeed); //ENA pin
-    analogWrite(5, motorspeed); //ENB pin
-    digitalWrite(motor1pin1, LOW);
-    digitalWrite(motor1pin2, HIGH);
-
-    digitalWrite(motor2pin1, LOW);
-    digitalWrite(motor2pin2, LOW);
-}
-
-//reverseturn 
-void reverseturn(){
-    analogWrite(3, motorspeed); //ENA pin
-    analogWrite(5, motorspeed); //ENB pin
-    digitalWrite(motor1pin1, LOW);
-    digitalWrite(motor1pin2, HIGH);
-
-    digitalWrite(motor2pin1, HIGH);
-    digitalWrite(motor2pin2, LOW);
-}
+int v = 140;
+int error = 0, prev_error = 0;
+float Kp = 18, Kd = 8; // KP=14, kD=6
+int weights[8] = { -10, -7, -5, -1, 1, 5, 7, 10};
+int avg_error = 0, sensors = 0, output = 0, leftmot = 0, rightmot = 0;
+unsigned long t;
+long duration;
+int distance;
+int count=0;
+int lsrinit=0;
 
 void setup() {
-  // put your setup code here, to run once:
-  Serial.begin(9600);
-//  for mototr pins
-  pinMode(motor1pin1, OUTPUT);
-  pinMode(motor1pin2, OUTPUT);
-  pinMode(motor2pin1, OUTPUT);
-  pinMode(motor2pin2, OUTPUT);
-
-//for speed controller
-  pinMode(3, OUTPUT); 
-  pinMode(5, OUTPUT);
-
-//  for IR sensor
-//
-  pinMode(s1,INPUT);
-  pinMode(s2,INPUT);
-  pinMode(s3,INPUT);
-  pinMode(s4,INPUT);
-  pinMode(s5,INPUT);
+  // put your setup code here, to run once
+  pinMode(ir1, INPUT);
+  pinMode(ir2, INPUT);
+  pinMode(ir3, INPUT);
+  pinMode(ir4, INPUT);
+  pinMode(ir5, INPUT);
+  pinMode(ir6, INPUT);
+  pinMode(ir7, INPUT);
+  pinMode(ir8, INPUT);
+  pinMode(stops, INPUT);
   
+  pinMode(ML1, OUTPUT);
+  pinMode(ML2, OUTPUT);
+  pinMode(MR1, OUTPUT);
+  pinMode(MR2, OUTPUT);
+
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+ //Serial.begin(9600);
 }
 
 void loop() {
 
-//taking sensor inputs
-  datas1=digitalRead(s1);
-  datas2=digitalRead(s2);
-  datas3=digitalRead(s3);
-  datas4=digitalRead(s4);
-  datas5=digitalRead(s5);
-  if((datas3==1) && (datas1==0 && datas2==0 && datas4==0 && datas5==0)){
-    movestraight();
+  readSensors();   //// '0' -> white      '1' -> black
+  
+  if ((ir[0] && ir[1] && ir[2]) || (ir[5] && ir[7]) || 
+      (ir[0] && ir[1] && ir[2] && ir[3] && ir[4] && ir[7]))
+  {
+    Serial.println("going for LSR");
+    lsrinit=1;
+    for(int i=0; i<8 ; i++)
+       irr[i] = 0;
+    t = millis();
+    while (millis() - t < 70) {
+      readSensors();
+      for (int i = 0; i < 8; i++)
+      {
+        if (irr[i] == 0)
+          irr[i] = ir[i];
+      }
+      straight();
+    }
+      for(int i=7; i>=0; i--)
+      {
+        Serial.print(irr[i]);
+        Serial.print("   ");
+        }
+        Serial.println("");
+    LSR();        // when we get any junction point. it will deside the priorirty of turn by (LSR)
   }
-  else if((datas2==1)&&(datas1==0 && datas4==0 && datas5==0)){
-    curveturnleft();
+  else {
+    //////Serial.println("going straight");
+    lsrinit=0;
+    straight();
   }
-  else if(datas1==1){
-    turnleft();
-    delay(200);
+   if(!lsrinit){
+    getdistance();
+    if(distance<20){
+      count++;
+    }
+    else{
+      count=0;
+    }
+    if(distance<20 && count>20){
+      turnAround();
+      count=0;
+    }
   }
-   else if((datas4==1)&&(datas1==0 && datas2==0 && datas5==0)){
-    curveturnright();
+}
+
+
+void readSensors() {
+
+  ir[0] = digitalRead(ir1);
+  ir[1] = digitalRead(ir2);
+  ir[2] = digitalRead(ir3);
+  ir[3] = digitalRead(ir4);
+  ir[4] = digitalRead(ir5);
+  ir[5] = digitalRead(ir6);
+  ir[6] = digitalRead(ir7);
+  ir[7] = digitalRead(ir8);
+
+//  dstops = digitalRead(stops);
+  
+  //////Serial.print(ir[0]);
+  //////Serial.print("   ");
+  //////Serial.print(ir[1]);
+  //////Serial.print("   ");
+  //////Serial.print(ir[2]);
+  //////Serial.print("   ");
+  //////Serial.print(ir[3]);
+  //////Serial.print("   ");
+  //////Serial.print(ir[4]);
+  //////Serial.print("   ");
+  //////Serial.print(ir[5]);
+  //////Serial.print("   ");
+  //////Serial.print(ir[6]);
+  //////Serial.print("   ");
+  //////Serial.print(ir[7]);
+  //////Serial.println("   ");
+  //////Serial.println("---------------------");
+}
+
+void getdistance(){
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+
+  duration = pulseIn(echoPin, HIGH);
+
+  distance = duration * 0.034 / 2;
+
+  Serial.print("Distance: ");
+  Serial.println(distance);
+}
+
+void LSR() {    // for junction points
+
+
+  /* analogWrite(ML1, v);
+    analogWrite(ML2, 0);
+    analogWrite(MR1, v);
+    analogWrite(MR2, 0);
+    delay(50);*/
+
+  if (digitalRead(ir1) && digitalRead(ir2) && digitalRead(ir4) && digitalRead(ir6) && digitalRead(ir8) && digitalRead(stops)){
+    done();
   }
 
-//during right we have to always check for right T
-  else if(datas5==1 && datas1==1 && datas4==1){
-     movestraight();
-     delay(dtt2);
-     if(datas4==0 && datas5==0 && datas1==0 && datas2==0 && datas3==0){
-     turnright();
-     delay(dtt);
-     }
-     else {
-          movestraight();
-     }
+  if (irr[7] || irr[6] )
+  { t = millis();
+    //if(( ir[0] && ir[7]) || ( ir[1] && ir[6])){     // case '1' or case '2'
+    //////Serial.println("case '1' or case '2'");
+    while (millis() - t < 50)
+      straight();
+    turnLeft();
   }
-  
-  
-  else if(datas1==datas2==datas3==datas4==datas5==0){
-    reverseturn();
-//    delay(dtt);
+
+  else if (irr[0] || irr[1] ) {              // case '4' or case'6'  and one more hiden case to be find!
+    if (digitalRead(ir1) || digitalRead(ir2) || digitalRead(ir3) || digitalRead(ir4) || digitalRead(ir5) || digitalRead(ir6) || digitalRead(ir7) || digitalRead(ir8)) {
+      //////Serial.println("case '4' \n stright");
+      straight();// only case'6'
+    }
+    else {
+      t=millis();
+      while (millis() - t < 50)
+        straight();
+      //////Serial.println("case '6'");
+      turnRight();
+    }
   }
+//  else if (!irr[0] && !irr[1] &&  !irr[2] && !irr[3] && !irr[4] && !irr[5] &&  !irr[6] && !irr[7]) {        // case'7'
+//    //////Serial.println("case '7'");
+//    turnAround();
+//  }
+}
+
+
+
+void done() {
+  Serial.print("######DONE#######");
+  analogWrite(ML1, 0);
+  analogWrite(ML2, 0);
+  analogWrite(MR1, 0);
+  analogWrite(MR2, 0);
+  done();
+}
+
+/*void straight(){ //////////////////////////////////////////////////////////////////////////////////////// without PID
+
+  if(ir[3]==1 && ir[4] ==1)
+  {
+    analogWrite(ML1, v);
+    analogWrite(ML2, 0);
+    analogWrite(MR1, v);
+    analogWrite(MR2, 0);
+
+    }
+  else if(ir[2]==1 && ir[3]==1){
+    analogWrite(ML1, v+20);
+    analogWrite(ML2, 0);
+    analogWrite(MR1, v-20);
+    analogWrite(MR2, 0);
+    }
+  else if(ir[4]==1 && ir[5]==1){
+    analogWrite(ML1, v-20);
+    analogWrite(ML2, 0);
+    analogWrite(MR1, v+20);
+    analogWrite(MR2, 0);
+    }
+  else if(ir[1]==1 && ir[2]==1){
+    analogWrite(ML1, v+40);
+    analogWrite(ML2, 0);
+    analogWrite(MR1, v-40);
+    analogWrite(MR2, 0);
+    }
+  else if(ir[5]==1 && ir[6]==1){
+    analogWrite(ML1, v-40);
+    analogWrite(ML2, 0);
+    analogWrite(MR1, v+40);
+    analogWrite(MR2, 0);
+    }
+  else if(ir[0]==1 )
+  { while(digitalRead(ir5)!=1)
+  {
+    analogWrite(ML1, v);
+    analogWrite(ML2, 0);
+    analogWrite(MR1, 0);
+    analogWrite(MR2, v);
+    }}
+  else if( ir[7]==1)
+  { while(digitalRead(ir4)!=1)
+    {analogWrite(ML1, 0);
+    analogWrite(ML2, v);
+    analogWrite(MR1, v);
+    analogWrite(MR2, 0);
+    }}
+
+  else {
+    analogWrite(ML1, v);
+    analogWrite(ML2, 0);
+    analogWrite(MR1, v);
+    analogWrite(MR2, 0);
+    }
+
+  }   ////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+*/
+void straight() { //////////////////////////////////////////////////////////////////////////////////////// By PID controlling
+  prev_error = avg_error;
+  for (int i = 0; i < 8; i++)
+  { if (ir[i])
+      sensors++;
+    error += ir[i] * weights[7 - i];
+  }
+  avg_error = error / sensors;
+  sensors = 0; error = 0;
+  output = Kp * avg_error + Kd * (avg_error - prev_error);
+
+  leftmot = v + output;
+  rightmot = v - output;
+  leftmot = constrain(leftmot, 0, 255);
+  rightmot = constrain(rightmot, 0, 255);
+  analogWrite(ML1, leftmot);
+  analogWrite(ML2, LOW);
+  analogWrite(MR1, rightmot);
+  analogWrite(MR2, LOW);
+
+  //////Serial.print(leftmot);
+  //////Serial.print("          ");
+  //////Serial.println(rightmot);
+  output = 0;
+}
+
+
+
+void turnLeft() {
+  //////Serial.print("turn left starts");
+  while (digitalRead(ir8) || digitalRead(ir7) || digitalRead(ir6) || digitalRead(ir5) || digitalRead(ir4) || digitalRead(ir3) || digitalRead(ir2) || digitalRead(ir1))
+  {
+    analogWrite(ML1, 0);
+    analogWrite(ML2, v);
+    analogWrite(MR1, v);
+    analogWrite(MR2, 0);
+    //////Serial.println("In while 1 ");
+  }
+
+  while (!digitalRead(ir5) && !digitalRead(ir4) && !digitalRead(ir3) && !digitalRead(ir2)) {
+    analogWrite(ML1, 0);
+    analogWrite(ML2, v);
+    analogWrite(MR1, v);
+    analogWrite(MR2, 0);
+    //////Serial.println("In while 2");
+  }
+  analogWrite(ML1, v);   // this thing is due overshoot of motors
+  analogWrite(ML2, 0);
+  analogWrite(MR1, 0);
+  analogWrite(MR2, v);
+  delay(10);
+  //////Serial.println("turn left ends");
+
+}
+
+
+void turnRight() {
+  //////Serial.println("turn right starts");
+  while (digitalRead(ir8) || digitalRead(ir7) || digitalRead(ir6) || digitalRead(ir5) || digitalRead(ir4) || digitalRead(ir3) || digitalRead(ir2) || digitalRead(ir1)) {
+    analogWrite(ML1, v);
+    analogWrite(ML2, 0);
+    analogWrite(MR1, 0);
+    analogWrite(MR2, v);
+    //////Serial.println("In while 1 ");
+  }
+
+  while ( !digitalRead(ir4) && !digitalRead(ir5) && !digitalRead(ir6) && !digitalRead(ir7) ) {
+    analogWrite(ML1, v);
+    analogWrite(ML2, 0);
+    analogWrite(MR1, 0);
+    analogWrite(MR2, v);
+    //////Serial.println("In while 2 ");
+  }
+  analogWrite(ML1, 0);   // this thing is due overshoot of motors
+  analogWrite(ML2, v);
+  analogWrite(MR1, v);
+  analogWrite(MR2, 0);
+  delay(10);
+  //////Serial.println("turn right ends");
+}
+
+
+void turnAround() {
+  //////Serial.println("turn around starts");
+//  analogWrite(ML1, v);
+//  analogWrite(ML2, 0);
+//  analogWrite(MR1, v);
+//  analogWrite(MR2, 0);
+//  delay(10);
+
+  while (digitalRead(ir8) || digitalRead(ir7) || digitalRead(ir6) || digitalRead(ir5) || digitalRead(ir4) || digitalRead(ir3) || digitalRead(ir2) || digitalRead(ir1)) {
+    analogWrite(ML1, v);
+    analogWrite(ML2, 0);
+    analogWrite(MR1, 0);
+    analogWrite(MR2, v);
+    Serial.println("In while1");
+  }
+  while (!digitalRead(ir3) && !digitalRead(ir4) && !digitalRead(ir5) && !digitalRead(ir6) && !digitalRead(ir7)) {
+    analogWrite(ML1, v);
+    analogWrite(ML2, 0);
+    analogWrite(MR1, 0);
+    analogWrite(MR2, v);
+    //////Serial.println("In while");
+  }
+  analogWrite(ML1, 0);   // this thing is due overshoot of motors
+  analogWrite(ML2, v);
+  analogWrite(MR1, v);
+  analogWrite(MR2, 0);
+  delay(10);
+  //////Serial.println("turn around ends");
+
 }
